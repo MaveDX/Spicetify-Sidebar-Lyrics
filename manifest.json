@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Sidebar Lyrics",
+    "description": "Synchronized lyrics rendered in Spotify Right Sidebar (Now Playing View).",
+    "preview": "preview.png",
+    "main": "sidebar-lyrics.js",
+    "readme": "README.md",
+    "tags": ["lyrics", "sidebar", "now-playing"]
+  }
+]
