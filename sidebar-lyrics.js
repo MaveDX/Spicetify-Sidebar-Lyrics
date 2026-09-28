@@ -46,6 +46,7 @@
     let lastActiveIndex = -1;
     let currentFetchController = null;
     const lyricsCache = new Map(); // Cache lyrics: "artist:title" -> data
+    let mxmToken = null;
 
     function initLyrics() {
         if (!Spicetify.Player || !Spicetify.Player.data) {
@@ -153,19 +154,86 @@
         return `${artist.toLowerCase().trim()}:${title.toLowerCase().trim()}`;
     }
 
-    async function fetchLyricsData(artist, title, signal) {
+    async function getMxmToken(signal) {
+        if (mxmToken) return mxmToken;
+        try {
+            const res = await fetch("https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0", { signal });
+            const json = await res.json();
+            if (json.message?.header?.status_code === 200) {
+                mxmToken = json.message.body.user_token;
+                return mxmToken;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    async function fetchFromMusixmatch(artist, title, durationSec, signal) {
+        try {
+            const token = await getMxmToken(signal);
+            if (!token) return null;
+
+            const durParam = durationSec ? `&f_has_lyrics=1&q_duration=${Math.round(durationSec)}` : '';
+            const searchUrl = `https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get?format=json&q_artist=${encodeURIComponent(artist)}&q_track=${encodeURIComponent(title)}${durParam}&user_token=${encodeURIComponent(token)}&app_id=web-desktop-app-v1.0`;
+
+            const res = await fetch(searchUrl, { signal });
+            if (!res.ok) return null;
+            const json = await res.json();
+
+            const body = json.message?.body?.macro_result_list;
+            if (!body) return null;
+
+            const subList = body.subtitles_list || body.track_list?.[0]?.track?.subtitle;
+            const rawSub = body.subtitle?.subtitle_body || subList?.[0]?.subtitle?.subtitle_body;
+            if (rawSub) {
+                const parsed = JSON.parse(rawSub);
+                const lrc = parsed.map(item => {
+                    const total = item.time.total;
+                    const m = Math.floor(total / 60).toString().padStart(2, '0');
+                    const s = (total % 60).toFixed(2).padStart(5, '0');
+                    return `[${m}:${s}]${item.text || '♪'}`;
+                }).join('\n');
+
+                return { syncedLyrics: lrc, plainLyrics: null };
+            }
+
+            const plainBody = body.lyrics?.lyrics_body || body.track_list?.[0]?.track?.lyrics?.lyrics_body;
+            if (plainBody) {
+                return { syncedLyrics: null, plainLyrics: plainBody };
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    async function fetchFromLrclib(artist, title, durationSec, signal) {
+        try {
+            const durParam = durationSec ? `&duration=${Math.round(durationSec)}` : '';
+            const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}${durParam}`;
+            const res = await fetch(url, { signal });
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function fetchLyricsData(artist, title, durationSec, signal) {
         const key = getKey(artist, title);
         if (lyricsCache.has(key)) {
             return lyricsCache.get(key);
         }
-        const url = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`;
-        const res = await fetch(url, { signal });
-        if (!res.ok) {
-            lyricsCache.set(key, null);
-            return null;
+
+        // Primary: LRCLIB
+        let data = await fetchFromLrclib(artist, title, durationSec, signal);
+
+        // Fallback: Musixmatch
+        if (!data || (!data.syncedLyrics && !data.plainLyrics)) {
+            const mxmData = await fetchFromMusixmatch(artist, title, durationSec, signal);
+            if (mxmData) {
+                data = mxmData;
+            }
         }
-        const data = await res.json();
-        lyricsCache.set(key, data);
+
+        lyricsCache.set(key, data || null);
         return data;
     }
 
@@ -179,11 +247,12 @@
             const nextItem = nextTracks[0];
             const artist = nextItem.contextTrack?.metadata?.artist_name || nextItem.artist?.name || nextItem.artists?.[0]?.name;
             const title = nextItem.contextTrack?.metadata?.title || nextItem.name || nextItem.title;
+            const durationSec = (nextItem.contextTrack?.metadata?.duration || 0) / 1000;
 
             if (artist && title) {
                 const key = getKey(artist, title);
                 if (!lyricsCache.has(key)) {
-                    await fetchLyricsData(artist, title);
+                    await fetchLyricsData(artist, title, durationSec);
                 }
             }
         } catch (e) {
@@ -212,9 +281,9 @@
 
         const artist = metadata.artist_name || '';
         const title = metadata.title || '';
+        const durationSec = (Spicetify.Player.getDuration() || parseInt(metadata.duration || 0, 10)) / 1000;
         const key = getKey(artist, title);
 
-        // Pre-fetch next track lyrics in background
         prefetchNextLyrics();
 
         if (lyricsCache.has(key)) {
@@ -231,7 +300,7 @@
         wrapper.style.transform = 'translate3d(0, 20px, 0)';
 
         try {
-            const data = await fetchLyricsData(artist, title, currentFetchController.signal);
+            const data = await fetchLyricsData(artist, title, durationSec, currentFetchController.signal);
             renderLyrics(data, wrapper);
         } catch (err) {
             if (err.name !== 'AbortError') {
@@ -299,7 +368,6 @@
 
     function startLyricsSync() {
         stopLyricsSync();
-        const lyricsContainer = document.getElementById('custom-sidebar-lyrics');
         const wrapper = document.getElementById('custom-sidebar-lyrics-wrapper');
 
         updateLyricsPosition = (force = false) => {
