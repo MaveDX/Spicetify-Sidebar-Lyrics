@@ -6,10 +6,13 @@ Synchronized lyrics rendered seamlessly inside Spotify's Right Sidebar (**Now Pl
 
 ## Overview & Features
 
-- **Clean Sidebar Layout**: Hides unnecessary default sidebar clutter (Artist Card, Song Credits, Merch, Tour Dates, etc.), leaving only the current track info, lyrics, and Next in Queue.
-- **Synchronized Lyrics**: Integrates with the free LRCLIB API to display real-time synced lyrics.
-- **Smart Queue Prefetching**: Automatically prefetches lyrics for the upcoming track in your queue for instantaneous updates on song changes.
-- **Smooth 0% CPU Scrolling**: Uses hardware-accelerated 3D CSS transforms (`translate3d`) and opacity transitions for smooth scrolling without performance degradation.
+- **Clean Sidebar Layout**: Automatically trims clutter (Artist Card, Song Credits, Merch, Tour Dates, etc.), keeping only current track info, lyrics, and Next in Queue.
+- **Spotify Official Synced Lyrics**: Queries Spotify's native internal lyrics API first for exact track-aligned, non-censored line-synchronized lyrics.
+- **Smart LRCLIB Fallback**: Automatically falls back to LRCLIB with strict duration tolerance (±4s) and explicit/clean filter matching to eliminate out-of-time edits and censored lyrics.
+- **Strictly Synced**: Never displays unsynced/plain lyrics.
+- **Click to Seek**: Click any lyric line to jump playback directly to that timestamp.
+- **Smart Queue Prefetching**: Automatically prefetches upcoming queue tracks in the background for instant transitions.
+- **Hardware-Accelerated Scrolling**: Uses 3D CSS transforms (`translate3d`) and opacity transitions for 60fps scrolling with zero CPU overhead.
 
 ## Installation
 
