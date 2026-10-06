@@ -2,7 +2,7 @@
 
 Synchronized lyrics rendered seamlessly inside Spotify's Right Sidebar (**Now Playing View**).
 
-![Sidebar Lyrics Preview](preview.png)
+<img width="435" height="703" alt="image" src="https://github.com/user-attachments/assets/1187477c-900e-43bd-bac5-ecad4eadd992" />
 
 ## Overview & Features
 
